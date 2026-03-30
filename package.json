@@ -15,6 +15,7 @@
     "babylonjs": "^9.0.0",
     "babylonjs-loaders": "^9.0.0",
     "cannon": "^0.6.2",
+    "recast-detour": "^1.6.4",
     "vite": "^8.0.3"
   }
 }

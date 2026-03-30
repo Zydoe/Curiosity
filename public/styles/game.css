@@ -1,5 +1,7 @@
 .game{
+    display: block;
     position: relative;
+    height: calc(100vh - 80px);
     width: 100%;
 }
 .fishCounter{
