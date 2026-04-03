@@ -9,13 +9,34 @@ const keysDown = new Set();
 window.addEventListener("keydown", (e) => keysDown.add(e.key));
 window.addEventListener("keyup", (e) => keysDown.delete(e.key));
 
+//pause menu
+let menu =  document.querySelector(".startMenuButtons");
 document.getElementById("startButton").addEventListener("click", () => {
-    document.querySelector(".startMenuButtons").style.display = "none";
+    menu.style.display = "none";
     beginGame();
+});
+document.getElementById("resetButton").addEventListener("click", () => {
+    resetGame();
+    menu.style.display = "none";
+    movementEnabled = true;
+});
+
+document.addEventListener("keydown", (e) => { //pause menu toggle
+    if (e.key === "Escape" && movementEnabled) {
+        menu.style.display = "flex";
+        movementEnabled = false;
+    }
+    else if (e.key === "Escape" && !movementEnabled) {
+        menu.style.display = "none";
+        movementEnabled = true;
+    }
 });
 
 //game
 let fishCount = 0;
+let fishTemplate;
+let allFish = [];
+let fishSpawnPoints;
 let movementEnabled = false;
 let soundEffects = {};
 let hedgeMesh;
@@ -37,6 +58,7 @@ let groundY = 0;
 
 //Dog
 let dogMesh;
+let dogSpawnPoint;
 const DogState = Object.freeze({ 
   PATROLLING: 'PATROLLING',
   CHASING:    'CHASING',
@@ -45,7 +67,7 @@ const DogState = Object.freeze({
 let dogState = DogState.PATROLLING;
 let dogInterestPoints = [];
 let dogDestination = null;
-let currentDogAnimation = "Walk";
+let currentDogAnimation = "Dog_Walk";
 let dogAnimations = [];
 let navigationPlugin;
 let crowd;
@@ -54,6 +76,7 @@ let dogStats = {
     speed: 3.5,
     chaseSpeed: 5.5,
 }
+let dogLOSCheck;
 
 
 const createScene = async () => {
@@ -80,9 +103,16 @@ const createScene = async () => {
     hedgeMesh = mapResult.meshes[1];
     fishResult.meshes[1].setParent(null);
     fishResult.meshes[1].isVisible = false;
+    fishTemplate = fishResult.meshes[1];
+    fishTemplate.name = "fishTemplate";
+    fishTemplate.setEnabled(false);
+    fishTemplate.checkCollisions = false;
     dogResult.meshes[1].setParent(null);
     dogResult.meshes[1].isVisible = false;
     dogMesh = dogResult.meshes[1];
+    dogResult.meshes.forEach(mesh => {
+        mesh.alwaysSelectAsActiveMesh = true;
+    });
 
     dogInterestPointsResult.meshes.forEach(mesh => {
         if(mesh.name == "__root__") return;
@@ -111,8 +141,12 @@ const createScene = async () => {
     initializeMap(mapResult);
     await initNavMesh(mapResult);
 
-    let fishLocations = await getFishLocations();
-    spawnFish(fishLocations, fishResult.meshes[1]);
+    fishSpawnPoints = await getFishLocations();
+    createFish(fishSpawnPoints, fishTemplate);
+
+    const dogSpawnResult = await BABYLON.ImportMeshAsync("3d/dogSpawnPoint.glb");
+    dogSpawnPoint = dogSpawnResult.meshes.find(m => m.name !== "__root__");
+    dogSpawnPoint.checkCollisions = false;
 
     spawnDog();
 
@@ -130,12 +164,11 @@ const createScene = async () => {
     camera.cameraAcceleration = 0.1;
     camera.maxCameraSpeed = 0.8;
 
-    logFrameRate();
+    //logFrameRate();
 
     //performance optimizations
     scene.skipPointerMovePicking = true;
     scene.autoClearDepthAndStencil = false;
-    scene.createOrUpdateSelectionOctree(32, 2);
     if (catMesh.material) {
         catMesh.material.freeze();
     }
@@ -166,11 +199,53 @@ function beginGame(){
     introCamera.animations.push(animation);
     scene.beginAnimation(introCamera, 0, 90, false, 1, () => {
         scene.activeCamera = playerCamera;
+       introCamera.dispose();
     });
     movementEnabled = true;
 }
 
+function resetGame(){
+    updateFishCounter(0);
+    playerCamera.cameraAcceleration = 0.5;
+    playerCamera.radius = 12;
+    playerCamera.heightOffset = 15;
+    playerCamera.rotationOffset = 180;
 
+    //reset cat
+    catMesh.position = new BABYLON.Vector3(0, groundY, 0);
+    catRotationY = 0;
+    catMesh.isVisible = true;
+    catMesh.position = new BABYLON.Vector3(0, groundY, 0);
+    catMesh.computeWorldMatrix(true);
+    playCatAnimation("Idle");
+    
+
+    //reset dog
+    dogDestination = null;
+    if (dogSniffingTimeout) {
+        clearTimeout(dogSniffingTimeout);
+        dogSniffingTimeout = null;
+    }
+    soundEffects.bark.stop();
+    soundEffects.sniff.stop();
+    dogState = DogState.PATROLLING;
+    const closest = navigationPlugin.getClosestPoint(dogSpawnPoint.getAbsolutePosition());
+    crowd.agentTeleport(dogAgentIndex, closest);
+
+
+    //respawn fish
+    resetFish();
+    movementEnabled = true;
+}
+
+function debugCollision() {
+    scene.meshes.forEach(mesh => {
+        if (mesh === catMesh || !mesh.checkCollisions) return;
+        if (catMesh.intersectsMesh(mesh, false)) {
+            console.log("Colliding with:", mesh.name, "| Position:", mesh.position);
+        }
+    });
+}
 
 createScene().then(s => {
     scene = s;
@@ -182,11 +257,15 @@ createScene().then(s => {
 
 //load audio and unlock on first interaction
 async function initAudio() {
-  const audioEngine = await BABYLON.CreateAudioEngineAsync();
-  await audioEngine.unlockAsync();
-  soundEffects.chomp = await BABYLON.CreateSoundAsync("chomp", "/sounds/chomp.mp3", scene);
-  soundEffects.bark = await BABYLON.CreateSoundAsync("bark", "/sounds/bark.mp3", scene);
-  soundEffects.sniff = await BABYLON.CreateSoundAsync("sniff", "/sounds/sniffing.mp3", scene);
+    const audioEngine = await BABYLON.CreateAudioEngineAsync();
+    await audioEngine.unlockAsync();
+    soundEffects.chomp = await BABYLON.CreateSoundAsync("chomp", "/sounds/chomp.mp3", scene);
+    soundEffects.bark = await BABYLON.CreateSoundAsync("bark", "/sounds/bark.mp3", scene);
+    soundEffects.sniff = await BABYLON.CreateSoundAsync("sniff", "/sounds/sniffing.mp3", scene);
+    soundEffects.death = await BABYLON.CreateSoundAsync("death", "/sounds/deathScream.mp3", scene);
+    soundEffects.walking = await BABYLON.CreateSoundAsync("walking", "/sounds/footsteps.mp3", { loop: true, autoplay: false });
+    soundEffects.walking.play();
+    soundEffects.walking.setVolume(0);
 }
 
 window.addEventListener("resize", () => engine.resize());
@@ -201,6 +280,9 @@ function Update() {
     catch(e){
         console.error("Error in Update loop:", e);
     }
+    if(dogMesh && !dogMesh.isVisible) {
+            console.trace("Dog is invisible!");
+        }
 }
 
 function moveCat(){
@@ -248,9 +330,16 @@ function moveCat(){
     }
     else if (moveVector.length() === 0) {
         playCatAnimation("Idle");
-    } 
+    }
     else {
         
+    }
+    if(isMoving){
+        soundEffects.walking.setVolume(1);
+        console.log("Started walking sound");
+    }
+    else {
+        soundEffects.walking.setVolume(0);
     }
 }
 
@@ -281,7 +370,6 @@ function initializeMap(mapResult) {
         const height = bb.maximumWorld.y - bb.minimumWorld.y;
 
         mesh.isPickable = false;
-        mesh.useOctreeForCollisions = true;
         if (mesh.material) {
             mesh.material.freeze();
         }
@@ -295,26 +383,34 @@ function initializeMap(mapResult) {
 async function getFishLocations(){
     const fishLocations = await BABYLON.ImportMeshAsync("3d/fishSpawnLocations.glb")
 
+    const root = fishLocations.meshes.find(m => m.name === "__root__");
+    if (root) root.computeWorldMatrix(true);
     let locations = [];
     fishLocations.meshes.forEach(mesh => {
         if(mesh.name=="__root__") return;
         mesh.computeWorldMatrix(true);
         locations.push(mesh.getAbsolutePosition().clone());
         mesh.isVisible = false;
-        mesh.dispose();
+        mesh.dispose(); 
     });
     return locations;
 }
 
-function spawnFish(positions, mesh){
+function createFish(positions, mesh){
+    mesh.setParent(null);
     positions.forEach(pos => {
+        mesh.checkCollisions = false;
+        mesh.computeWorldMatrix(true);
         const bobbing = bobbingAnimation(pos.y);
         const rotation = rotationAnimation();
-        const fish = mesh.clone("fish");
+        const fish = mesh.clone("fish", null, true);
+        allFish.push(fish);
         fish.setParent(null);
         fish.position = pos.clone();
-        fish.checkCollisions = true;
+        fish.setEnabled(true);
+        fish.checkCollisions = false;
         fish.isVisible = true;
+        fish.visibility = 1;
         fish.isPickable = false;
 
         //animations
@@ -323,7 +419,15 @@ function spawnFish(positions, mesh){
         fish.animations.push(bobbing);
         fish.animations.push(rotation);
         fish.animations = [bobbing, rotation];
+        fish.computeWorldMatrix(true);
+        fish.refreshBoundingInfo();
         scene.beginDirectAnimation(fish, [bobbing, rotation], 0, 60, true);
+    });
+}
+
+function resetFish(){
+    allFish.forEach(fish => {
+        fish.isVisible = true;
     });
 }
 
@@ -331,10 +435,10 @@ function spawnFish(positions, mesh){
 
 function checkFishPickup() {
     const PICKUP_DISTANCE = 2;
-    scene.meshes.forEach(mesh => {
-        if (mesh.name !== "fish" || !mesh.isVisible) return;
-        if (BABYLON.Vector3.DistanceSquared(catMesh.position, mesh.position) < PICKUP_DISTANCE ** 3) {
-            eatFish(mesh);
+    allFish.forEach(fish => {
+        if (!fish.isVisible) return;
+        if (BABYLON.Vector3.DistanceSquared(catMesh.position, fish.position) < PICKUP_DISTANCE ** 3) {
+            eatFish(fish);
         }
     });
 }
@@ -358,13 +462,12 @@ function bobbingAnimation(startHeight = 0){
 }
 
 function eatFish(fish) {
+    if (!fish.isVisible) return;
     fish.actionManager = null; // prevent double-trigger
     fish.isVisible = false;
     fish.checkCollisions = false;
 
     // Stop fish animations
-    scene.stopAnimation(fish);
-    scene.stopAnimation(fish.parent); // stop pivot bobbing if using parent node
 
     if(soundEffects.chomp){
         soundEffects.chomp.play();
@@ -399,7 +502,6 @@ async function initNavMesh(mapResult) {
         detailSampleMaxError: 1,
     };
 
-    // pass the floor/ground mesh(es) — the navmesh is baked from geometry
     const navMeshes = [mapResult.meshes[3]];
     navigationPlugin.createNavMesh(navMeshes, navMeshParameters);
 
@@ -414,17 +516,20 @@ async function initNavMesh(mapResult) {
 
 // -----------------------------DOG---------------------------------
 async function spawnDog() {
-    const dogSpawnResult = await BABYLON.ImportMeshAsync("3d/dogSpawnPoint.glb");
-    const spawnMesh = dogSpawnResult.meshes.find(m => m.name !== "__root__");
-    spawnMesh.computeWorldMatrix(true);
-    const spawnPos = spawnMesh.getAbsolutePosition().clone();
-    spawnMesh.dispose();
+    if (dogLOSCheck !== null) {
+        clearInterval(dogLOSCheck);
+        dogLOSCheck = null;
+    }
+    
+    dogSpawnPoint.computeWorldMatrix(true);
+    const spawnPos = dogSpawnPoint.getAbsolutePosition().clone();
+    dogSpawnPoint.isVisible = false;
+    dogSpawnPoint.collisionsEnabled = false;
 
     dogMesh.position = new BABYLON.Vector3(spawnPos.x, groundY, spawnPos.z);
     dogMesh.isVisible = true;
     dogState = DogState.PATROLLING;
 
-    // add dog as a crowd agent
     const agentParams = {
         radius: 0.5,
         height: 1.5,
@@ -435,8 +540,15 @@ async function spawnDog() {
         separationWeight: 1.0,
     };
     const closestPoint = navigationPlugin.getClosestPoint(dogMesh.position);
-    dogAgentIndex = crowd.addAgent(closestPoint, agentParams, dogMesh);
-    setInterval(() => { //check line of sight every 250ms (quarter of a second)
+    dogMesh.alwaysSelectAsActiveMesh = true;
+    if (dogAgentIndex >= 0) {
+        crowd.updateAgentParameters(dogAgentIndex, agentParams);
+        crowd.agentTeleport(dogAgentIndex, closestPoint);
+        crowd.agentGoto(dogAgentIndex, closestPoint);
+    }else {
+        dogAgentIndex = crowd.addAgent(closestPoint, agentParams, dogMesh);
+    }
+    dogLOSCheck = setInterval(() => { //check line of sight every 250ms (quarter of a second)
         checkDogLineOfSight();
     }, 250);
 }
@@ -466,6 +578,7 @@ function updateDog() {
         playDogAnimation("Dog_Run");
         const closest = navigationPlugin.getClosestPoint(catMesh.position);
         crowd.agentGoto(dogAgentIndex, closest);
+        checkDogCaughtCat();
     }
     else if (dogState === DogState.SEARCHING) {
         if (!dogDestination || BABYLON.Vector3.DistanceSquared(dogMesh.position, dogDestination) < 6) {
@@ -485,6 +598,17 @@ function updateDog() {
         else{
             playDogAnimation("Dog_Run");
         }
+    }
+}
+function checkDogCaughtCat(){
+    if(!movementEnabled) return;
+    const CATCH_DISTANCE = 1.5;
+    if (BABYLON.Vector3.DistanceSquared(dogMesh.getAbsolutePosition(), catMesh.getAbsolutePosition()) < CATCH_DISTANCE ** 2) {
+        movementEnabled = false; //freeze player movement while caught animation plays
+        soundEffects.death.play();
+        spawnBloodExplosion(catMesh.getAbsolutePosition());
+        catMesh.isVisible = false;
+        setTimeout(() => {resetGame();}, 2000);
     }
 }
 function chooseDogInterestPoint(){
@@ -507,6 +631,7 @@ function playDogAnimation(name) {
 }
 function checkDogLineOfSight() {
     if (!dogMesh || !catMesh) return;
+    if (!movementEnabled) return;
 
     const from = dogMesh.position.clone();
     const to = catMesh.position.clone();
@@ -551,4 +676,46 @@ function startDogSearch(){
 function startPatrolling(){
     dogState = DogState.PATROLLING;
     dogDestination = null;
+}
+function spawnBloodExplosion(position) {
+    const particles = new BABYLON.ParticleSystem("blood", 200, scene);
+    
+    // use a simple built-in texture for the particles
+    particles.particleTexture = new BABYLON.Texture("https://assets.babylonjs.com/textures/flare.png", scene);
+
+    particles.emitter = position.clone();
+    
+    // colors
+    particles.color1 = new BABYLON.Color4(0.8, 0, 0, 1);      // bright red
+    particles.color2 = new BABYLON.Color4(0.4, 0, 0, 1);      // dark red
+    particles.colorDead = new BABYLON.Color4(0.1, 0, 0, 0);   // fade to black/transparent
+
+    // size
+    particles.minSize = 0.1;
+    particles.maxSize = 0.4;
+
+    // lifetime
+    particles.minLifeTime = 0.5;
+    particles.maxLifeTime = 2;
+
+    // speed
+    particles.minEmitPower = 1;
+    particles.maxEmitPower = 3;
+    particles.updateSpeed = 0.02;
+
+    // burst — emit all at once then stop
+    particles.manualEmitCount = 200;
+    particles.maxEmitBox = new BABYLON.Vector3(0.1, 0.1, 0.1);
+
+    // spray in all directions
+    particles.direction1 = new BABYLON.Vector3(-1, 2, -1);
+    particles.direction2 = new BABYLON.Vector3(1, 4, 1);
+
+    // gravity pulls them down
+    particles.gravity = new BABYLON.Vector3(0, -9.81, 0);
+
+    particles.start();
+
+    // auto dispose after the longest particle lifetime
+    setTimeout(() => particles.dispose(), 2000);
 }

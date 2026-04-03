@@ -1,0 +1,310 @@
+[1mdiff --git a/main.js b/main.js[m
+[1mindex c471694..9b7f753 100644[m
+[1m--- a/main.js[m
+[1m+++ b/main.js[m
+[36m@@ -9,13 +9,34 @@[m [mconst keysDown = new Set();[m
+ window.addEventListener("keydown", (e) => keysDown.add(e.key));[m
+ window.addEventListener("keyup", (e) => keysDown.delete(e.key));[m
+ [m
+[32m+[m[32m//pause menu[m
+[32m+[m[32mlet menu =  document.querySelector(".startMenuButtons");[m
+ document.getElementById("startButton").addEventListener("click", () => {[m
+[31m-    document.querySelector(".startMenuButtons").style.display = "none";[m
+[32m+[m[32m    menu.style.display = "none";[m
+     beginGame();[m
+ });[m
+[32m+[m[32mdocument.getElementById("resetButton").addEventListener("click", () => {[m
+[32m+[m[32m    resetGame();[m
+[32m+[m[32m    menu.style.display = "none";[m
+[32m+[m[32m    movementEnabled = true;[m
+[32m+[m[32m});[m
+[32m+[m
+[32m+[m[32mdocument.addEventListener("keydown", (e) => { //pause menu toggle[m
+[32m+[m[32m    if (e.key === "Escape" && movementEnabled) {[m
+[32m+[m[32m        menu.style.display = "flex";[m
+[32m+[m[32m        movementEnabled = false;[m
+[32m+[m[32m    }[m
+[32m+[m[32m    else if (e.key === "Escape" && !movementEnabled) {[m
+[32m+[m[32m        menu.style.display = "none";[m
+[32m+[m[32m        movementEnabled = true;[m
+[32m+[m[32m    }[m
+[32m+[m[32m});[m
+ [m
+ //game[m
+ let fishCount = 0;[m
+[32m+[m[32mlet fishTemplate;[m
+[32m+[m[32mlet allFish = [];[m
+[32m+[m[32mlet fishSpawnPoints;[m
+ let movementEnabled = false;[m
+ let soundEffects = {};[m
+ let hedgeMesh;[m
+[36m@@ -37,6 +58,7 @@[m [mlet groundY = 0;[m
+ [m
+ //Dog[m
+ let dogMesh;[m
+[32m+[m[32mlet dogSpawnPoint;[m
+ const DogState = Object.freeze({ [m
+   PATROLLING: 'PATROLLING',[m
+   CHASING:    'CHASING',[m
+[36m@@ -45,7 +67,7 @@[m [mconst DogState = Object.freeze({[m
+ let dogState = DogState.PATROLLING;[m
+ let dogInterestPoints = [];[m
+ let dogDestination = null;[m
+[31m-let currentDogAnimation = "Walk";[m
+[32m+[m[32mlet currentDogAnimation = "Dog_Walk";[m
+ let dogAnimations = [];[m
+ let navigationPlugin;[m
+ let crowd;[m
+[36m@@ -54,6 +76,7 @@[m [mlet dogStats = {[m
+     speed: 3.5,[m
+     chaseSpeed: 5.5,[m
+ }[m
+[32m+[m[32mlet dogLOSCheck;[m
+ [m
+ [m
+ const createScene = async () => {[m
+[36m@@ -80,9 +103,16 @@[m [mconst createScene = async () => {[m
+     hedgeMesh = mapResult.meshes[1];[m
+     fishResult.meshes[1].setParent(null);[m
+     fishResult.meshes[1].isVisible = false;[m
+[32m+[m[32m    fishTemplate = fishResult.meshes[1];[m
+[32m+[m[32m    fishTemplate.name = "fishTemplate";[m
+[32m+[m[32m    fishTemplate.setEnabled(false);[m
+[32m+[m[32m    fishTemplate.checkCollisions = false;[m
+     dogResult.meshes[1].setParent(null);[m
+     dogResult.meshes[1].isVisible = false;[m
+     dogMesh = dogResult.meshes[1];[m
+[32m+[m[32m    dogResult.meshes.forEach(mesh => {[m
+[32m+[m[32m        mesh.alwaysSelectAsActiveMesh = true;[m
+[32m+[m[32m    });[m
+ [m
+     dogInterestPointsResult.meshes.forEach(mesh => {[m
+         if(mesh.name == "__root__") return;[m
+[36m@@ -111,8 +141,12 @@[m [mconst createScene = async () => {[m
+     initializeMap(mapResult);[m
+     await initNavMesh(mapResult);[m
+ [m
+[31m-    let fishLocations = await getFishLocations();[m
+[31m-    spawnFish(fishLocations, fishResult.meshes[1]);[m
+[32m+[m[32m    fishSpawnPoints = await getFishLocations();[m
+[32m+[m[32m    createFish(fishSpawnPoints, fishTemplate);[m
+[32m+[m
+[32m+[m[32m    const dogSpawnResult = await BABYLON.ImportMeshAsync("3d/dogSpawnPoint.glb");[m
+[32m+[m[32m    dogSpawnPoint = dogSpawnResult.meshes.find(m => m.name !== "__root__");[m
+[32m+[m[32m    dogSpawnPoint.checkCollisions = false;[m
+ [m
+     spawnDog();[m
+ [m
+[36m@@ -130,7 +164,7 @@[m [mconst createScene = async () => {[m
+     camera.cameraAcceleration = 0.1;[m
+     camera.maxCameraSpeed = 0.8;[m
+ [m
+[31m-    logFrameRate();[m
+[32m+[m[32m    //logFrameRate();[m
+ [m
+     //performance optimizations[m
+     scene.skipPointerMovePicking = true;[m
+[36m@@ -166,11 +200,47 @@[m [mfunction beginGame(){[m
+     introCamera.animations.push(animation);[m
+     scene.beginAnimation(introCamera, 0, 90, false, 1, () => {[m
+         scene.activeCamera = playerCamera;[m
+[32m+[m[32m       // introCamera.dispose();[m
+     });[m
+     movementEnabled = true;[m
+ }[m
+ [m
+[32m+[m[32mfunction resetGame(){[m
+[32m+[m[32m    updateFishCounter(0);[m
+[32m+[m[32m    //reset cat[m
+[32m+[m[32m    catMesh.position = new BABYLON.Vector3(0, groundY, 0);[m
+[32m+[m[32m    catRotationY = 0;[m
+[32m+[m[32m    catMesh.isVisible = true;[m
+[32m+[m[32m    catMesh.position = new BABYLON.Vector3(0, groundY, 0);[m
+[32m+[m[32m    catMesh.computeWorldMatrix(true);[m
+[32m+[m[32m    playCatAnimation("Idle");[m
+[32m+[m[41m    [m
+[32m+[m
+[32m+[m[32m    //reset dog[m
+[32m+[m[32m    dogDestination = null;[m
+[32m+[m[32m    if (dogSniffingTimeout) {[m
+[32m+[m[32m        clearTimeout(dogSniffingTimeout);[m
+[32m+[m[32m        dogSniffingTimeout = null;[m
+[32m+[m[32m    }[m
+[32m+[m[32m    soundEffects.bark.stop();[m
+[32m+[m[32m    soundEffects.sniff.stop();[m
+[32m+[m[32m    dogState = DogState.PATROLLING;[m
+[32m+[m[32m    const closest = navigationPlugin.getClosestPoint(dogSpawnPoint.getAbsolutePosition());[m
+[32m+[m[32m    crowd.agentTeleport(dogAgentIndex, closest);[m
+[32m+[m
+ [m
+[32m+[m[32m    //respawn fish[m
+[32m+[m[32m    resetFish();[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32mfunction debugCollision() {[m
+[32m+[m[32m    scene.meshes.forEach(mesh => {[m
+[32m+[m[32m        if (mesh === catMesh || !mesh.checkCollisions) return;[m
+[32m+[m[32m        if (catMesh.intersectsMesh(mesh, false)) {[m
+[32m+[m[32m            console.log("Colliding with:", mesh.name, "| Position:", mesh.position);[m
+[32m+[m[32m        }[m
+[32m+[m[32m    });[m
+[32m+[m[32m}[m
+ [m
+ createScene().then(s => {[m
+     scene = s;[m
+[36m@@ -201,6 +271,9 @@[m [mfunction Update() {[m
+     catch(e){[m
+         console.error("Error in Update loop:", e);[m
+     }[m
+[32m+[m[32m    if(dogMesh && !dogMesh.isVisible) {[m
+[32m+[m[32m            console.trace("Dog is invisible!");[m
+[32m+[m[32m        }[m
+ }[m
+ [m
+ function moveCat(){[m
+[36m@@ -295,26 +368,34 @@[m [mfunction initializeMap(mapResult) {[m
+ async function getFishLocations(){[m
+     const fishLocations = await BABYLON.ImportMeshAsync("3d/fishSpawnLocations.glb")[m
+ [m
+[32m+[m[32m    const root = fishLocations.meshes.find(m => m.name === "__root__");[m
+[32m+[m[32m    if (root) root.computeWorldMatrix(true);[m
+     let locations = [];[m
+     fishLocations.meshes.forEach(mesh => {[m
+         if(mesh.name=="__root__") return;[m
+         mesh.computeWorldMatrix(true);[m
+         locations.push(mesh.getAbsolutePosition().clone());[m
+         mesh.isVisible = false;[m
+[31m-        mesh.dispose();[m
+[32m+[m[32m        mesh.dispose();[m[41m [m
+     });[m
+     return locations;[m
+ }[m
+ [m
+[31m-function spawnFish(positions, mesh){[m
+[32m+[m[32mfunction createFish(positions, mesh){[m
+[32m+[m[32m    mesh.setParent(null);[m
+     positions.forEach(pos => {[m
+[32m+[m[32m        mesh.checkCollisions = false;[m
+[32m+[m[32m        mesh.computeWorldMatrix(true);[m
+         const bobbing = bobbingAnimation(pos.y);[m
+         const rotation = rotationAnimation();[m
+[31m-        const fish = mesh.clone("fish");[m
+[32m+[m[32m        const fish = mesh.clone("fish", null, true);[m
+[32m+[m[32m        allFish.push(fish);[m
+         fish.setParent(null);[m
+         fish.position = pos.clone();[m
+[31m-        fish.checkCollisions = true;[m
+[32m+[m[32m        fish.setEnabled(true);[m
+[32m+[m[32m        fish.checkCollisions = false;[m
+         fish.isVisible = true;[m
+[32m+[m[32m        fish.visibility = 1;[m
+         fish.isPickable = false;[m
+ [m
+         //animations[m
+[36m@@ -323,18 +404,26 @@[m [mfunction spawnFish(positions, mesh){[m
+         fish.animations.push(bobbing);[m
+         fish.animations.push(rotation);[m
+         fish.animations = [bobbing, rotation];[m
+[32m+[m[32m        fish.computeWorldMatrix(true);[m
+[32m+[m[32m        fish.refreshBoundingInfo();[m
+         scene.beginDirectAnimation(fish, [bobbing, rotation], 0, 60, true);[m
+     });[m
+ }[m
+ [m
+[32m+[m[32mfunction resetFish(){[m
+[32m+[m[32m    allFish.forEach(fish => {[m
+[32m+[m[32m        fish.isVisible = true;[m
+[32m+[m[32m    });[m
+[32m+[m[32m}[m
+[32m+[m
+ [m
+ [m
+ function checkFishPickup() {[m
+     const PICKUP_DISTANCE = 2;[m
+[31m-    scene.meshes.forEach(mesh => {[m
+[31m-        if (mesh.name !== "fish" || !mesh.isVisible) return;[m
+[31m-        if (BABYLON.Vector3.DistanceSquared(catMesh.position, mesh.position) < PICKUP_DISTANCE ** 3) {[m
+[31m-            eatFish(mesh);[m
+[32m+[m[32m    allFish.forEach(fish => {[m
+[32m+[m[32m        if (!fish.isVisible) return;[m
+[32m+[m[32m        if (BABYLON.Vector3.DistanceSquared(catMesh.position, fish.position) < PICKUP_DISTANCE ** 3) {[m
+[32m+[m[32m            eatFish(fish);[m
+         }[m
+     });[m
+ }[m
+[36m@@ -358,13 +447,12 @@[m [mfunction bobbingAnimation(startHeight = 0){[m
+ }[m
+ [m
+ function eatFish(fish) {[m
+[32m+[m[32m    if (!fish.isVisible) return;[m
+     fish.actionManager = null; // prevent double-trigger[m
+     fish.isVisible = false;[m
+     fish.checkCollisions = false;[m
+ [m
+     // Stop fish animations[m
+[31m-    scene.stopAnimation(fish);[m
+[31m-    scene.stopAnimation(fish.parent); // stop pivot bobbing if using parent node[m
+ [m
+     if(soundEffects.chomp){[m
+         soundEffects.chomp.play();[m
+[36m@@ -399,7 +487,6 @@[m [masync function initNavMesh(mapResult) {[m
+         detailSampleMaxError: 1,[m
+     };[m
+ [m
+[31m-    // pass the floor/ground mesh(es) — the navmesh is baked from geometry[m
+     const navMeshes = [mapResult.meshes[3]];[m
+     navigationPlugin.createNavMesh(navMeshes, navMeshParameters);[m
+ [m
+[36m@@ -414,17 +501,20 @@[m [masync function initNavMesh(mapResult) {[m
+ [m
+ // -----------------------------DOG---------------------------------[m
+ async function spawnDog() {[m
+[31m-    const dogSpawnResult = await BABYLON.ImportMeshAsync("3d/dogSpawnPoint.glb");[m
+[31m-    const spawnMesh = dogSpawnResult.meshes.find(m => m.name !== "__root__");[m
+[31m-    spawnMesh.computeWorldMatrix(true);[m
+[31m-    const spawnPos = spawnMesh.getAbsolutePosition().clone();[m
+[31m-    spawnMesh.dispose();[m
+[32m+[m[32m    if (dogLOSCheck !== null) {[m
+[32m+[m[32m        clearInterval(dogLOSCheck);[m
+[32m+[m[32m        dogLOSCheck = null;[m
+[32m+[m[32m    }[m
+[32m+[m[41m    [m
+[32m+[m[32m    dogSpawnPoint.computeWorldMatrix(true);[m
+[32m+[m[32m    const spawnPos = dogSpawnPoint.getAbsolutePosition().clone();[m
+[32m+[m[32m    dogSpawnPoint.isVisible = false;[m
+[32m+[m[32m    dogSpawnPoint.collisionsEnabled = false;[m
+ [m
+     dogMesh.position = new BABYLON.Vector3(spawnPos.x, groundY, spawnPos.z);[m
+     dogMesh.isVisible = true;[m
+     dogState = DogState.PATROLLING;[m
+ [m
+[31m-    // add dog as a crowd agent[m
+     const agentParams = {[m
+         radius: 0.5,[m
+         height: 1.5,[m
+[36m@@ -435,8 +525,15 @@[m [masync function spawnDog() {[m
+         separationWeight: 1.0,[m
+     };[m
+     const closestPoint = navigationPlugin.getClosestPoint(dogMesh.position);[m
+[31m-    dogAgentIndex = crowd.addAgent(closestPoint, agentParams, dogMesh);[m
+[31m-    setInterval(() => { //check line of sight every 250ms (quarter of a second)[m
+[32m+[m[32m    dogMesh.alwaysSelectAsActiveMesh = true;[m
+[32m+[m[32m    if (dogAgentIndex >= 0) {[m
+[32m+[m[32m        crowd.updateAgentParameters(dogAgentIndex, agentParams);[m
+[32m+[m[32m        crowd.agentTeleport(dogAgentIndex, closestPoint);[m
+[32m+[m[32m        crowd.agentGoto(dogAgentIndex, closestPoint);[m
+[32m+[m[32m    }else {[m
+[32m+[m[32m        dogAgentIndex = crowd.addAgent(closestPoint, agentParams, dogMesh);[m
+[32m+[m[32m    }[m
+[32m+[m[32m    dogLOSCheck = setInterval(() => { //check line of sight every 250ms (quarter of a second)[m
+         checkDogLineOfSight();[m
+     }, 250);[m
+ }[m
+[36m@@ -507,6 +604,7 @@[m [mfunction playDogAnimation(name) {[m
+ }[m
+ function checkDogLineOfSight() {[m
+     if (!dogMesh || !catMesh) return;[m
+[32m+[m[32m    if (!movementEnabled) return;[m
+ [m
+     const from = dogMesh.position.clone();[m
+     const to = catMesh.position.clone();[m
