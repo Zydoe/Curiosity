@@ -9,13 +9,28 @@ const keysDown = new Set();
 window.addEventListener("keydown", (e) => keysDown.add(e.key));
 window.addEventListener("keyup", (e) => keysDown.delete(e.key));
 
-let fishCount = 0;
+document.getElementById("startButton").addEventListener("click", () => {
+    document.querySelector(".startMenuButtons").style.display = "none";
+    beginGame();
+});
 
+//game
+let fishCount = 0;
+let movementEnabled = false;
+let soundEffects = {};
+let hedgeMesh;
+
+//camera
+let playerCamera;
+let introCamera;
+
+
+//player character
 let logged = false;
 let scene;
 let catRotationY = 0;
 let catStats = { speed: 6, turnSpeed: 1.2 };
-let catMesh, playerCamera;
+let catMesh;
 let catAnimations = [];
 let currentCatAnimation = "Idle";
 let groundY = 0;
@@ -40,18 +55,20 @@ let dogStats = {
     chaseSpeed: 5.5,
 }
 
-let soundEffects = {};
 
-let hedgeMesh;
 const createScene = async () => {
     scene = new BABYLON.Scene(engine);
     scene.collisionsEnabled = true;
 
     initAudio();
 
+    
+
     const camera = new BABYLON.FollowCamera("camera", new BABYLON.Vector3(3, 23, -9), scene);
     const light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(5, 3, 5), scene);
     light.intensity = 1;
+
+    
 
     const [catResult, mapResult, fishResult, dogResult,dogInterestPointsResult] = await Promise.all([
         BABYLON.ImportMeshAsync("3d/cat.glb"),
@@ -123,9 +140,37 @@ const createScene = async () => {
         catMesh.material.freeze();
     }
 
-    
+    introCamera = new BABYLON.ArcRotateCamera("introCamera", 
+        Math.PI / 2,  //horizontal
+        Math.PI / 2.2, //vertical
+        6, //distance
+        catMesh.position.clone(),scene
+    );
+
+    scene.activeCamera = introCamera;
+
+
     return scene;
 };
+
+
+function beginGame(){
+    if(!introCamera || !playerCamera) return;
+    let destination = playerCamera.position.clone();
+    //pan intro camera to player camera position over 3 seconds, then switch to player camera
+    const animation = new BABYLON.Animation("introPan", "position", 30, BABYLON.Animation.ANIMATIONTYPE_VECTOR3, BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT);
+    const keys = [];
+    keys.push({ frame: 0, value: introCamera.position.clone() });
+    keys.push({ frame: 90, value: destination });
+    animation.setKeys(keys);
+    introCamera.animations.push(animation);
+    scene.beginAnimation(introCamera, 0, 90, false, 1, () => {
+        scene.activeCamera = playerCamera;
+    });
+    movementEnabled = true;
+}
+
+
 
 createScene().then(s => {
     scene = s;
@@ -159,6 +204,7 @@ function Update() {
 }
 
 function moveCat(){
+    if(!movementEnabled) return;
     let deltaTime = engine.getDeltaTime() / 1000;
     let moveVector = BABYLON.Vector3.Zero();
 
@@ -397,6 +443,7 @@ async function spawnDog() {
 
 let dogSniffingTimeout;
 function updateDog() {
+    if(!movementEnabled) return;
     if (!dogMesh || dogAgentIndex < 0 || !crowd) return;
 
     // face direction of travel

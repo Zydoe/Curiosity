@@ -22,3 +22,31 @@
     color: #333;
     margin-right: 20px;
 }
+
+
+/* Start Menu Styles */
+.startMenuButtons {
+    position: absolute;
+    top: 70%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    display: flex;
+    gap: 4em;
+    z-index: 2;
+}
+.startMenuButtons button {
+    padding: 10px 20px;
+    font-size: 3em;
+    cursor: pointer;
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 5px;
+}
+.startMenuButtons button:hover {
+    background-color: rgba(152, 255, 174, 0.76);
+}
+#startButton {
+    font-size: 4em;
+    font-weight: bolder;
+}
