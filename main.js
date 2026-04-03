@@ -88,8 +88,7 @@ const createScene = async () => {
     
 
     const camera = new BABYLON.FollowCamera("camera", new BABYLON.Vector3(3, 23, -9), scene);
-    const light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(5, 3, 5), scene);
-    light.intensity = 1;
+    
 
     
 
@@ -150,6 +149,29 @@ const createScene = async () => {
 
     spawnDog();
 
+    //lighting
+    const light = new BABYLON.DirectionalLight("light", new BABYLON.Vector3(-1, -2, -0.2), scene);
+    light.position = new BABYLON.Vector3(20, 60, 20);
+    light.intensity = 4;
+
+    const ambientLight = new BABYLON.HemisphericLight("ambient", new BABYLON.Vector3(0, 1, 0), scene);
+    ambientLight.intensity = 0.4;
+
+    const shadowGenerator = new BABYLON.ShadowGenerator(1024, light);
+    shadowGenerator.useBlurExponentialShadowMap = true;
+
+    shadowGenerator.addShadowCaster(catMesh);
+    shadowGenerator.addShadowCaster(dogMesh);
+    shadowGenerator.addShadowCaster(hedgeMesh);
+
+    catMesh.receiveShadows = true;
+    dogMesh.receiveShadows = true;
+    mapResult.meshes.forEach(mesh => {
+        mesh.receiveShadows = true;
+    });
+
+
+    //camera
     const cameraTarget = BABYLON.MeshBuilder.CreateBox("cameraTarget", { size: 0.1 }, scene);
     cameraTarget.isVisible = false;
     cameraTarget.isPickable = false;
@@ -164,7 +186,7 @@ const createScene = async () => {
     camera.cameraAcceleration = 0.1;
     camera.maxCameraSpeed = 0.8;
 
-    //logFrameRate();
+    logFrameRate();
 
     //performance optimizations
     scene.skipPointerMovePicking = true;
@@ -334,12 +356,13 @@ function moveCat(){
     else {
         
     }
-    if(isMoving){
-        soundEffects.walking.setVolume(1);
-        console.log("Started walking sound");
-    }
-    else {
-        soundEffects.walking.setVolume(0);
+    if(soundEffects.walking){
+        if(isMoving){
+            soundEffects.walking.setVolume(1);
+        }
+        else {
+            soundEffects.walking.setVolume(0);
+        }
     }
 }
 
