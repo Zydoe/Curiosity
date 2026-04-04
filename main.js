@@ -8,9 +8,9 @@ const engine = new BABYLON.Engine(canvas, true, { adaptToDeviceRatio: false });
 const keysDown = new Set();
 window.addEventListener("keydown", (e) => keysDown.add(e.key));
 window.addEventListener("keyup", (e) => keysDown.delete(e.key));
-
+document.getElementById("pauseHighScoreValue").textContent = localStorage.getItem("highScore") || 0;
 //pause menu
-let menu =  document.querySelector(".startMenuButtons");
+let menu =  document.querySelector(".pauseMenu");
 document.getElementById("startButton").addEventListener("click", () => {
     menu.style.display = "none";
     beginGame();
@@ -19,18 +19,62 @@ document.getElementById("resetButton").addEventListener("click", () => {
     resetGame();
     menu.style.display = "none";
     movementEnabled = true;
+    dogMovementEnabled = true;
 });
+document.getElementById("deathResetButton").addEventListener("click", () => {
+    hideDeathScreen();
+    resetGame();
+    movementEnabled = true;
+    dogMovementEnabled = true;
+});
+let deathScreen = document.getElementById("deathScreen");
+
+function showDeathScreen(){
+    document.getElementById("currentScoreValue").textContent = fishCount;
+    document.getElementById("highScoreValue").textContent = localStorage.getItem("highScore") || 0;
+    deathScreen.classList.toggle("active",true);
+}
+function hideDeathScreen(){
+    deathScreen.classList.toggle("active",false);
+}
 
 document.addEventListener("keydown", (e) => { //pause menu toggle
     if (e.key === "Escape" && movementEnabled) {
-        menu.style.display = "flex";
+        document.getElementById("pauseHighScoreValue").textContent = localStorage.getItem("highScore") || 0;
+        menu.style.display = "block";
         movementEnabled = false;
+        dogMovementEnabled = false;
     }
     else if (e.key === "Escape" && !movementEnabled) {
         menu.style.display = "none";
         movementEnabled = true;
+        dogMovementEnabled = true;
     }
 });
+const animateRadiusTo = (targetRadius, durationSeconds = 1.5) => { //camera animation for when player dies and radius expands to show whole map
+    const fps = 60;
+    const totalFrames = fps * durationSeconds;
+
+    const radiusAnim = new BABYLON.Animation(
+        "cameraRadiusAnim",
+        "radius",
+        fps,
+        BABYLON.Animation.ANIMATIONTYPE_FLOAT,
+        BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT
+    );
+
+    radiusAnim.setKeys([
+        { frame: 0,           value: playerCamera.radius },
+        { frame: totalFrames, value: targetRadius }
+    ]);
+
+    const ease = new BABYLON.CubicEase();
+    ease.setEasingMode(BABYLON.EasingFunction.EASINGMODE_EASEINOUT);
+    radiusAnim.setEasingFunction(ease);
+
+    playerCamera.animations = [radiusAnim];
+    scene.beginAnimation(playerCamera, 0, totalFrames, false);
+};
 
 //game
 let fishCount = 0;
@@ -38,6 +82,7 @@ let fishTemplate;
 let allFish = [];
 let fishSpawnPoints;
 let movementEnabled = false;
+let dogMovementEnabled = false;
 let soundEffects = {};
 let hedgeMesh;
 
@@ -180,11 +225,22 @@ const createScene = async () => {
 
     camera.lockedTarget = cameraTarget;
     playerCamera = camera;
-    camera.radius = 12;
-    camera.heightOffset = 15;
-    camera.rotationOffset = 180;
-    camera.cameraAcceleration = 0.1;
-    camera.maxCameraSpeed = 0.8;
+    setCameraToFollow();
+
+    //Skybox
+    const skybox = BABYLON.MeshBuilder.CreateBox("skyBox", { size: 1000 }, scene);
+    const skyboxMat = new BABYLON.StandardMaterial("skyBoxMat", scene);
+    skyboxMat.backFaceCulling = false;
+    skyboxMat.disableLighting = true;
+
+    const hdrTexture = new BABYLON.HDRCubeTexture("/images/sky_2k.hdr", scene, 512);
+    hdrTexture.coordinatesMode = BABYLON.Texture.SKYBOX_MODE;
+    hdrTexture.rotationY = BABYLON.Tools.ToRadians(-120);
+    skyboxMat.reflectionTexture = hdrTexture;
+    hdrTexture.coordinatesMode = BABYLON.Texture.SKYBOX_MODE;
+
+    skybox.material = skyboxMat;
+    skybox.infiniteDistance = true;
 
     logFrameRate();
 
@@ -224,20 +280,19 @@ function beginGame(){
        introCamera.dispose();
     });
     movementEnabled = true;
+    dogMovementEnabled = true;
 }
 
 function resetGame(){
     updateFishCounter(0);
-    playerCamera.cameraAcceleration = 0.5;
-    playerCamera.radius = 12;
-    playerCamera.heightOffset = 15;
-    playerCamera.rotationOffset = 180;
+    setCameraToFollow();
 
     //reset cat
     catMesh.position = new BABYLON.Vector3(0, groundY, 0);
     catRotationY = 0;
     catMesh.isVisible = true;
     catMesh.position = new BABYLON.Vector3(0, groundY, 0);
+    catMesh.checkCollisions = true;
     catMesh.computeWorldMatrix(true);
     playCatAnimation("Idle");
     
@@ -257,17 +312,22 @@ function resetGame(){
 
     //respawn fish
     resetFish();
+
+
     movementEnabled = true;
+    dogMovementEnabled = true;
 }
 
-function debugCollision() {
-    scene.meshes.forEach(mesh => {
-        if (mesh === catMesh || !mesh.checkCollisions) return;
-        if (catMesh.intersectsMesh(mesh, false)) {
-            console.log("Colliding with:", mesh.name, "| Position:", mesh.position);
-        }
-    });
+function setCameraToFollow(){
+    scene.activeCamera = playerCamera;
+    playerCamera.cameraAcceleration = 0.2;
+    playerCamera.radius = 12;
+    playerCamera.heightOffset = 15;
+    playerCamera.rotationOffset = 180;
+    playerCamera.minZ = 0.1;
+    playerCamera.maxZ = 5000;
 }
+
 
 createScene().then(s => {
     scene = s;
@@ -283,11 +343,14 @@ async function initAudio() {
     await audioEngine.unlockAsync();
     soundEffects.chomp = await BABYLON.CreateSoundAsync("chomp", "/sounds/chomp.mp3", scene);
     soundEffects.bark = await BABYLON.CreateSoundAsync("bark", "/sounds/bark.mp3", scene);
-    soundEffects.sniff = await BABYLON.CreateSoundAsync("sniff", "/sounds/sniffing.mp3", scene);
+    soundEffects.sniff = await BABYLON.CreateSoundAsync("sniff", "/sounds/sniffing.mp3", {loop: false, spatialEnabled: true, maxDistance: 30});
     soundEffects.death = await BABYLON.CreateSoundAsync("death", "/sounds/deathScream.mp3", scene);
-    soundEffects.walking = await BABYLON.CreateSoundAsync("walking", "/sounds/footsteps.mp3", { loop: true, autoplay: false });
-    soundEffects.walking.play();
+    soundEffects.walking = await BABYLON.CreateSoundAsync("walking", "/sounds/catWalk.mp3", { loop: true, autoplay: false });
+    soundEffects.dogWalking = await BABYLON.CreateSoundAsync("walking", "/sounds/dogWalk.mp3", { loop: true, autoplay: false, spatialEnabled: true, maxDistance: 5 });
+    //soundEffects.dogWalking.attachToMesh(dogMesh);
+   // soundEffects.sniff.attachToMesh(dogMesh);
     soundEffects.walking.setVolume(0);
+    soundEffects.walking.play();
 }
 
 window.addEventListener("resize", () => engine.resize());
@@ -490,13 +553,12 @@ function eatFish(fish) {
     fish.isVisible = false;
     fish.checkCollisions = false;
 
-    // Stop fish animations
-
     if(soundEffects.chomp){
         soundEffects.chomp.play();
     }
     
     updateFishCounter();
+    checkHighScore();
 }
 
 function updateFishCounter(newCount = (fishCount + 1)) {
@@ -578,7 +640,7 @@ async function spawnDog() {
 
 let dogSniffingTimeout;
 function updateDog() {
-    if(!movementEnabled) return;
+    if(!dogMovementEnabled) return;
     if (!dogMesh || dogAgentIndex < 0 || !crowd) return;
 
     // face direction of travel
@@ -624,15 +686,25 @@ function updateDog() {
     }
 }
 function checkDogCaughtCat(){
-    if(!movementEnabled) return;
+    if(!dogMovementEnabled) return;
     const CATCH_DISTANCE = 1.5;
     if (BABYLON.Vector3.DistanceSquared(dogMesh.getAbsolutePosition(), catMesh.getAbsolutePosition()) < CATCH_DISTANCE ** 2) {
-        movementEnabled = false; //freeze player movement while caught animation plays
-        soundEffects.death.play();
-        spawnBloodExplosion(catMesh.getAbsolutePosition());
-        catMesh.isVisible = false;
-        setTimeout(() => {resetGame();}, 2000);
+        OnCatDeath();
     }
+}
+function OnCatDeath(){
+    movementEnabled = false;
+    dogMovementEnabled = true; //freeze player movement while caught animation plays
+    soundEffects.death.play();
+    spawnBloodExplosion(catMesh.getAbsolutePosition());
+    catMesh.isVisible = false;
+    catMesh.checkCollisions = false;
+    soundEffects.walking.setVolume(0);
+    startPatrolling();
+    setTimeout(() => {
+        animateRadiusTo(50, 5); //expand camera radius to show whole map
+        showDeathScreen();
+    }, 2000);
 }
 function chooseDogInterestPoint(){
     if(dogInterestPoints.length === 0) return null;
@@ -654,7 +726,8 @@ function playDogAnimation(name) {
 }
 function checkDogLineOfSight() {
     if (!dogMesh || !catMesh) return;
-    if (!movementEnabled) return;
+    if(!catMesh.isVisible) return; //lets dog return to patrolling if cat is dead
+    if (!dogMovementEnabled) return;
 
     const from = dogMesh.position.clone();
     const to = catMesh.position.clone();
@@ -704,14 +777,14 @@ function spawnBloodExplosion(position) {
     const particles = new BABYLON.ParticleSystem("blood", 200, scene);
     
     // use a simple built-in texture for the particles
-    particles.particleTexture = new BABYLON.Texture("https://assets.babylonjs.com/textures/flare.png", scene);
+    particles.particleTexture = createBloodTexture(scene);
 
     particles.emitter = position.clone();
     
     // colors
-    particles.color1 = new BABYLON.Color4(0.8, 0, 0, 1);      // bright red
-    particles.color2 = new BABYLON.Color4(0.4, 0, 0, 1);      // dark red
-    particles.colorDead = new BABYLON.Color4(0.1, 0, 0, 0);   // fade to black/transparent
+    particles.color1 = new BABYLON.Color4(0.4, 0, 0, 1);      // bright red
+    particles.color2 = new BABYLON.Color4(0.2, 0, 0, 1);      // dark red
+    particles.colorDead = new BABYLON.Color4(0.1, 0, 0, 0.6);   // fade to black/transparent
 
     // size
     particles.minSize = 0.1;
@@ -741,4 +814,45 @@ function spawnBloodExplosion(position) {
 
     // auto dispose after the longest particle lifetime
     setTimeout(() => particles.dispose(), 2000);
+}
+function createBloodTexture(scene) {
+    // Create an offscreen canvas
+    const size = 128;
+    const canvas = document.createElement("canvas");
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext("2d");
+
+    const center = size / 2;
+    const radius = size / 2;
+
+    // Radial gradient: dark red core fading to transparent
+    const gradient = ctx.createRadialGradient(center, center, 0, center, center, radius);
+    gradient.addColorStop(0.0, "rgba(255, 30, 0, 1)");    // bright red-orange core
+    gradient.addColorStop(0.2, "rgba(180, 0, 0, 1)");     // deep red
+    gradient.addColorStop(0.5, "rgba(80, 0, 0, 0.8)");    // dark red mid
+    gradient.addColorStop(0.8, "rgba(20, 0, 0, 0.3)");    // near-black edge
+    gradient.addColorStop(1.0, "rgba(0, 0, 0, 0)");       // fully transparent
+
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.arc(center, center, radius, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Wrap the canvas in a Babylon DynamicTexture
+    const texture = new BABYLON.DynamicTexture("orbTexture", { width: size, height: size }, scene);
+    const texCtx = texture.getContext();
+
+    // Copy canvas pixels into the DynamicTexture
+    texCtx.drawImage(canvas, 0, 0);
+    texture.update();
+
+    return texture;
+}
+
+function checkHighScore(){
+    const highScore = localStorage.getItem("highScore") || 0;
+    if(fishCount > highScore){
+        localStorage.setItem("highScore", fishCount);
+    }
 }

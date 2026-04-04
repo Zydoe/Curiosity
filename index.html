@@ -12,10 +12,21 @@
     </div>
     
     <div class= "game">
-      <div class = "startMenuButtons">
-        <button id="resetButton">Reset</button>
-        <button id="startButton">Start</button>
-        <button id="optionsButton">Options</button>
+      <div class="deathScreen" id="deathScreen">
+        <h2>You Died!</h2>
+        <div>
+          <h3 id="currentScoreText">Fish Eaten: <span id="currentScoreValue">0</span></h3>
+          <h4 id="highScoreText">Highscore: <span id="highScoreValue">0</span></h4>
+        </div>
+        <button id="deathResetButton">Try Again</button>
+      </div>
+      <div class="pauseMenu" id="pauseMenu">
+        <h2>Highscore: <span id="pauseHighScoreValue">0</span></h2>
+        <div class = "pauseMenuButtons">
+          <button id="resetButton">Reset</button>
+          <button id="startButton">Start</button>
+          <button id="optionsButton">Options</button>
+        </div>
       </div>
       <div class = "fishCounter">
       
