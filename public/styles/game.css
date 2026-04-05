@@ -127,6 +127,76 @@
     font-weight: bold;
 }
 
+
+/**win screen styles */
+.winScreen {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 8em;
+    z-index: 3;
+}
+.winScreen.active {
+    display: flex;
+    animation-name: fadeIn;
+    animation-duration: 2s;
+}
+.winScreen h2 {
+    font-size: 12em;
+    color: rgb(20, 138, 20);
+    margin: 0;
+    font-family: 'Papyrus', serif;
+    text-shadow: #14cb14 2px 2px 0px, #14cb14 -2px -2px 0px, #14cb14 -2px 2px 0px, #14cb14 2px -2px 0px;
+    border-radius: 10px;
+    padding: 20px;
+}
+.winScreen button {
+    padding: 15px 30px;
+    font-size: 3em;
+    text-align: center;
+    width: 6em;
+    cursor: pointer;
+    background-color: #0b6b07;
+    color: rgb(255, 255, 255);
+    border: none;
+    border-radius: 15px;
+    animation-name: growAndShrink;
+    animation-duration: 1s;
+    animation-iteration-count: infinite;
+}
+.winScreenButtons{
+    display: flex;
+    gap: 4em;
+    flex-direction: column;
+    align-items: center;
+}
+.winScreen button:hover {
+    background-color: rgb(16, 196, 16);
+    color: #fff;
+}
+.winScreen h3 {
+    font-size: 6em;
+    color: rgb(255, 255, 255);
+    margin: 0;
+    font-family: 'Papyrus', serif;
+    text-shadow: #14cb14 2px 2px 0px, #14cb14 -2px -2px 0px, #14cb14 -2px 2px 0px, #14cb14 2px -2px 0px;
+    border-radius: 10px;
+    padding: 20px;
+}
+.winScreen h4 {
+    font-size: 4em;
+    color: rgb(255, 255, 255);
+    margin: 0;
+    font-family: 'Papyrus', serif;
+    text-shadow: #cb3314 2px 2px 0px, #cb3314 -2px -2px 0px, #cb3314 -2px 2px 0px, #cb3314 2px -2px 0px;
+    border-radius: 10px;
+    padding: 20px;
+}
+
 @keyframes growAndShrink {
     0% { transform: scale(1); }
     50% { transform: scale(1.1); }

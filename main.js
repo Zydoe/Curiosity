@@ -27,6 +27,15 @@ document.getElementById("deathResetButton").addEventListener("click", () => {
     movementEnabled = true;
     dogMovementEnabled = true;
 });
+document.getElementById("winResetButton").addEventListener("click", () => {
+    document.getElementById("winScreen").classList.toggle("active", false);
+    resetGame();
+    movementEnabled = true;
+    dogMovementEnabled = true;
+});
+document.getElementById("winContinueButton").addEventListener("click", OnContinue);
+
+
 let deathScreen = document.getElementById("deathScreen");
 
 function showDeathScreen(){
@@ -98,7 +107,7 @@ let catRotationY = 0;
 let catStats = { speed: 6, turnSpeed: 1.2 };
 let catMesh;
 let catAnimations = [];
-let currentCatAnimation = "Idle";
+let currentCatAnimation;
 let groundY = 0;
 
 //Dog
@@ -242,7 +251,7 @@ const createScene = async () => {
     skybox.material = skyboxMat;
     skybox.infiniteDistance = true;
 
-    logFrameRate();
+    //logFrameRate();
 
     //performance optimizations
     scene.skipPointerMovePicking = true;
@@ -257,9 +266,9 @@ const createScene = async () => {
         6, //distance
         catMesh.position.clone(),scene
     );
+    playCatAnimation("Sitting");
 
     scene.activeCamera = introCamera;
-
 
     return scene;
 };
@@ -347,6 +356,7 @@ async function initAudio() {
     soundEffects.death = await BABYLON.CreateSoundAsync("death", "/sounds/deathScream.mp3", scene);
     soundEffects.walking = await BABYLON.CreateSoundAsync("walking", "/sounds/catWalk.mp3", { loop: true, autoplay: false });
     soundEffects.dogWalking = await BABYLON.CreateSoundAsync("walking", "/sounds/dogWalk.mp3", { loop: true, autoplay: false, spatialEnabled: true, maxDistance: 5 });
+    soundEffects.levelClear = await BABYLON.CreateSoundAsync("levelClear", "/sounds/levelClear.mp3", scene);
     //soundEffects.dogWalking.attachToMesh(dogMesh);
    // soundEffects.sniff.attachToMesh(dogMesh);
     soundEffects.walking.setVolume(0);
@@ -365,9 +375,6 @@ function Update() {
     catch(e){
         console.error("Error in Update loop:", e);
     }
-    if(dogMesh && !dogMesh.isVisible) {
-            console.trace("Dog is invisible!");
-        }
 }
 
 function moveCat(){
@@ -402,7 +409,6 @@ function moveCat(){
         BABYLON.Matrix.RotationY(catRotationY)
     );
 
-    // in Update(), temporarily replace moveWithCollisions with this:
     catMesh.moveWithCollisions(rotatedVector);
 
     catMesh.position.y = groundY;
@@ -549,7 +555,7 @@ function bobbingAnimation(startHeight = 0){
 
 function eatFish(fish) {
     if (!fish.isVisible) return;
-    fish.actionManager = null; // prevent double-trigger
+    fish.actionManager = null; //prevent double-trigger
     fish.isVisible = false;
     fish.checkCollisions = false;
 
@@ -559,6 +565,7 @@ function eatFish(fish) {
     
     updateFishCounter();
     checkHighScore();
+    checkWinCondition();
 }
 
 function updateFishCounter(newCount = (fishCount + 1)) {
@@ -682,6 +689,17 @@ function updateDog() {
         }
         else{
             playDogAnimation("Dog_Run");
+        }
+    }
+    if(!dogMovementEnabled){
+        crowd.updateAgentParameters(dogAgentIndex, { maxSpeed: 0 });
+    }
+    else{
+        if(dogState === DogState.PATROLLING){
+            crowd.updateAgentParameters(dogAgentIndex, { maxSpeed: dogStats.speed });
+        }
+        else if(dogState === DogState.CHASING){
+            crowd.updateAgentParameters(dogAgentIndex, { maxSpeed: dogStats.chaseSpeed });
         }
     }
 }
@@ -855,4 +873,37 @@ function checkHighScore(){
     if(fishCount > highScore){
         localStorage.setItem("highScore", fishCount);
     }
+}
+
+function checkWinCondition(){
+    if(allFish.filter(fish => fish.isVisible).length === 0){
+        OnLevelClear();
+    }
+    // if(fishCount===1){ //Debugging shortcut to test win condition
+    //     OnLevelClear();
+    // }
+}
+
+function OnLevelClear(){
+    movementEnabled = false;
+    dogMovementEnabled = false;
+    playerCamera.radius = 10;
+    playerCamera.heightOffset = 1;
+    document.getElementById("winScreen").classList.toggle("active", true);
+    document.getElementById("finalScoreValue").textContent = fishCount;
+    document.getElementById("winHighScoreValue").textContent = localStorage.getItem("highScore") || 0;
+    playCatAnimation("Flip"); //if you're reading this... Like my flip animation?
+    soundEffects.walking.setVolume(0);
+    soundEffects.levelClear.play();
+}
+
+function OnContinue(){
+    let finalScore = fishCount;
+    document.getElementById("winScreen").classList.toggle("active", false);
+    resetGame();
+    updateFishCounter(finalScore);
+    dogStats.speed += 1;
+    dogStats.chaseSpeed += 1;
+    movementEnabled = true;
+    dogMovementEnabled = true;
 }
