@@ -4,6 +4,7 @@ import Recast from "recast-detour";
 
 const canvas = document.getElementById("renderCanvas");
 const engine = new BABYLON.Engine(canvas, true, { adaptToDeviceRatio: false });
+let audioEngine;
 
 const keysDown = new Set();
 window.addEventListener("keydown", (e) => keysDown.add(e.key));
@@ -21,6 +22,23 @@ document.getElementById("resetButton").addEventListener("click", () => {
     movementEnabled = true;
     dogMovementEnabled = true;
 });
+document.getElementById("volumeSlider").addEventListener("input", (e) => {
+    const volume = parseFloat(e.target.value);
+    audioEngine.volume = volume;
+});
+document.getElementById("brightnessSlider").addEventListener("input", (e) => {
+    const brightness = parseFloat(e.target.value);
+    engine.getRenderingCanvas().style.filter = `brightness(${brightness})`;
+});
+document.getElementById("optionsBackButton").addEventListener("click", (e) => {
+    document.getElementById("optionsMenu").classList.toggle("active", false);
+    document.getElementById("pauseMenuButtons").classList.toggle("active", true);
+});
+document.getElementById("optionsButton").addEventListener("click", (e) => {
+    document.getElementById("optionsMenu").classList.toggle("active", true);
+    document.getElementById("pauseMenuButtons").classList.toggle("active", false);
+});
+
 document.getElementById("deathResetButton").addEventListener("click", () => {
     hideDeathScreen();
     resetGame();
@@ -290,6 +308,7 @@ function beginGame(){
     });
     movementEnabled = true;
     dogMovementEnabled = true;
+    document.getElementById("startButton").innerHTML = "Continue";
 }
 
 function resetGame(){
@@ -348,7 +367,7 @@ createScene().then(s => {
 
 //load audio and unlock on first interaction
 async function initAudio() {
-    const audioEngine = await BABYLON.CreateAudioEngineAsync();
+    audioEngine = await BABYLON.CreateAudioEngineAsync();
     await audioEngine.unlockAsync();
     soundEffects.chomp = await BABYLON.CreateSoundAsync("chomp", "/sounds/chomp.mp3", scene);
     soundEffects.bark = await BABYLON.CreateSoundAsync("bark", "/sounds/bark.mp3", scene);
