@@ -71,24 +71,26 @@
 /* Death Screen Styles */
 .deathScreen {
     position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
+    width: 100%;
+    height: 100%;
     display: none;
-    flex-direction: column;
+    grid-template-columns: repeat(6,1fr);
+    grid-template-rows: repeat(7,1fr);
     align-items: center;
-    gap: 8em;
     z-index: 3;
 }
 .deathScreen h2 {
-    font-size: 12em;
+    font-size: 8em;
     color: rgb(138, 20, 20);
     background-color: #333333b2;
     margin: 0;
+    margin-top: 20px;
     font-family: 'Papyrus', serif;
     text-shadow: #cb1919 2px 2px 0px, #cb1919 -2px -2px 0px, #cb1919 -2px 2px 0px, #cb1919 2px -2px 0px;
     border-radius: 10px;
     padding: 20px;
+    grid-column: 2 / span 4;
+    text-align: center;
 }
 .deathScreen button {
     padding: 15px 30px;
@@ -101,13 +103,15 @@
     animation-name: growAndShrink;
     animation-duration: 1s;
     animation-iteration-count: infinite;
+    grid-row: 5 / span 2;
+    grid-column: 3 / span 2;
 }
 .deathScreen button:hover {
     background-color: rgb(196, 16, 16);
     color: #fff;
 }
 .deathScreen.active {
-    display: flex;
+    display: grid;
     animation-name: fadeIn;
     animation-duration: 1s;
 }
@@ -118,16 +122,28 @@
     padding: 10px 20px;
     border-radius: 5px;
     text-align: center;
+    margin: 0px;
 }
-
+.scoreText {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1em;
+    grid-column: 3 / span 2;
+    grid-row: 3 / span 2;
+}
 #currentScoreText {
     font-size: 3em;
     font-weight: bold;
+    grid-column: 3 / span 1;
+    grid-row: 2 / span 1;
 }
 
 #highScoreText {
     font-size: 2em;
     font-weight: bold;
+    grid-column: 3 / span 1;
+    grid-row: 3 / span 1;
 }
 
 
@@ -137,28 +153,28 @@
     width: 100%;
     height: 100%;
     display: none;
-    flex-direction: column;
     align-items: center;
     text-align: center;
-    gap: 8em;
     z-index: 3;
+    grid-template-columns: repeat(6,1fr);
+    grid-template-rows: repeat(7,1fr);
 }
 .winScreen.active {
-    display: flex;
+    display: grid;
     animation-name: fadeIn;
     animation-duration: 2s;
 }
 .winScreen h2 {
-    font-size: 12em;
+    font-size: 8em;
     color: rgb(20, 138, 20);
     margin: 0;
     font-family: 'Papyrus', serif;
     text-shadow: #14cb14 2px 2px 0px, #14cb14 -2px -2px 0px, #14cb14 -2px 2px 0px, #14cb14 2px -2px 0px;
     border-radius: 10px;
-    padding: 20px;
+    grid-column: 2 / span 4;
+    grid-row: 2 / span 2;
 }
 .winScreen button {
-    padding: 15px 30px;
     font-size: 3em;
     text-align: center;
     width: 6em;
@@ -174,7 +190,8 @@
 .winScreenButtons{
     display: flex;
     gap: 4em;
-    flex-direction: column;
+    grid-column: 3 / span 2;
+    grid-row: 6 / span 2;
     align-items: center;
 }
 .winScreen button:hover {
@@ -182,7 +199,7 @@
     color: #fff;
 }
 .winScreen h3 {
-    font-size: 6em;
+    font-size: 3em;
     color: rgb(255, 255, 255);
     margin: 0;
     font-family: 'Papyrus', serif;
@@ -191,13 +208,21 @@
     padding: 20px;
 }
 .winScreen h4 {
-    font-size: 4em;
+    font-size: 3em;
     color: rgb(255, 255, 255);
     margin: 0;
     font-family: 'Papyrus', serif;
     text-shadow: #cb3314 2px 2px 0px, #cb3314 -2px -2px 0px, #cb3314 -2px 2px 0px, #cb3314 2px -2px 0px;
     border-radius: 10px;
     padding: 20px;
+}
+#finalScoreText {
+    grid-column: 3 / span 2;
+    grid-row: 4 / span 1;
+}
+#winHighScoreText {
+    grid-column: 3 / span 2;
+    grid-row: 5 / span 1;
 }
 
 /**Options Menu Styles */
